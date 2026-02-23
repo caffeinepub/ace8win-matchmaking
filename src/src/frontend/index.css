@@ -1,0 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.125rem;
+    /* Deep charcoal base */
+    --background: 0.15 0.005 270;
+    --foreground: 1 0 0;
+    /* Cards with slight elevation */
+    --card: 0.20 0.008 270;
+    --card-foreground: 1 0 0;
+    /* Popovers slightly lighter */
+    --popover: 0.22 0.008 270;
+    --popover-foreground: 1 0 0;
+    /* Neon cyan primary */
+    --primary: 0.88 0.18 195;
+    --primary-foreground: 0.10 0.005 270;
+    /* Secondary muted slate */
+    --secondary: 0.35 0.01 270;
+    --secondary-foreground: 0.85 0 0;
+    /* Muted gray for de-emphasized content */
+    --muted: 0.25 0.01 270;
+    --muted-foreground: 0.55 0.01 270;
+    /* Electric magenta accent */
+    --accent: 0.70 0.28 330;
+    --accent-foreground: 1 0 0;
+    /* Magenta for destructive */
+    --destructive: 0.65 0.30 330;
+    --destructive-foreground: 1 0 0;
+    /* Lime green success */
+    --success: 0.85 0.25 130;
+    --success-foreground: 0.10 0.005 270;
+    /* Amber warning */
+    --warning: 0.75 0.15 85;
+    --warning-foreground: 0.10 0.005 270;
+    /* Subtle borders */
+    --border: 0.30 0.01 270;
+    --input: 0.30 0.01 270;
+    --ring: 0.88 0.18 195;
+    /* Chart colors - neon palette */
+    --chart-1: 0.88 0.18 195;
+    --chart-2: 0.70 0.28 330;
+    --chart-3: 0.85 0.25 130;
+    --chart-4: 0.75 0.15 85;
+    --chart-5: 0.80 0.20 270;
+  }
+
+  .dark {
+    --radius: 0.125rem;
+    /* Deep charcoal base */
+    --background: 0.12 0.008 270;
+    --foreground: 1 0 0;
+    /* Cards with slight elevation */
+    --card: 0.18 0.01 270;
+    --card-foreground: 1 0 0;
+    /* Popovers slightly lighter */
+    --popover: 0.20 0.01 270;
+    --popover-foreground: 1 0 0;
+    /* Neon cyan primary */
+    --primary: 0.88 0.18 195;
+    --primary-foreground: 0.12 0.008 270;
+    /* Secondary muted slate */
+    --secondary: 0.30 0.015 270;
+    --secondary-foreground: 0.85 0 0;
+    /* Muted gray for de-emphasized content */
+    --muted: 0.22 0.01 270;
+    --muted-foreground: 0.52 0.015 270;
+    /* Electric magenta accent */
+    --accent: 0.70 0.28 330;
+    --accent-foreground: 1 0 0;
+    /* Magenta for destructive */
+    --destructive: 0.65 0.30 330;
+    --destructive-foreground: 1 0 0;
+    /* Lime green success */
+    --success: 0.85 0.25 130;
+    --success-foreground: 0.12 0.008 270;
+    /* Amber warning */
+    --warning: 0.75 0.15 85;
+    --warning-foreground: 0.12 0.008 270;
+    /* Subtle borders */
+    --border: 0.28 0.015 270;
+    --input: 0.28 0.015 270;
+    --ring: 0.88 0.18 195;
+    /* Chart colors - neon palette */
+    --chart-1: 0.88 0.18 195;
+    --chart-2: 0.70 0.28 330;
+    --chart-3: 0.85 0.25 130;
+    --chart-4: 0.75 0.15 85;
+    --chart-5: 0.80 0.20 270;
+  }
+
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Rajdhani', sans-serif;
+  }
+  
+  .font-body {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  .neon-glow {
+    box-shadow: 0 0 10px oklch(var(--primary)), 0 0 20px oklch(var(--primary) / 0.5);
+  }
+  
+  .neon-border {
+    border: 1px solid oklch(var(--primary));
+    box-shadow: 0 0 5px oklch(var(--primary) / 0.5);
+  }
+}
