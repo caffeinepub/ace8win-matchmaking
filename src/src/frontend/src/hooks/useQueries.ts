@@ -199,6 +199,22 @@ export function useSaveCallerUserProfile() {
   });
 }
 
+export function useUpdateCallerUserProfile() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (profile: UserProfile) => {
+      if (!actor) throw new Error('Actor not available');
+      // Use saveCallerUserProfile which replaces the profile (acts as update)
+      return actor.saveCallerUserProfile(profile);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currentUserProfile'] });
+    },
+  });
+}
+
 export function useCreateMatch() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
@@ -276,23 +292,6 @@ export function useRejectPayment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pendingPayments'] });
       queryClient.invalidateQueries({ queryKey: ['matches'] });
-    },
-  });
-}
-
-export function useBookAllSlots() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (matchId: string) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.bookAllSlots(matchId);
-    },
-    onSuccess: (_, matchId) => {
-      queryClient.invalidateQueries({ queryKey: ['matches'] });
-      queryClient.invalidateQueries({ queryKey: ['match', matchId] });
-      queryClient.invalidateQueries({ queryKey: ['userMatches'] });
     },
   });
 }

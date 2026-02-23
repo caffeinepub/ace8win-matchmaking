@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useGetAllMatches, useGetUserMatches, useJoinMatch, useSubmitPayment, useGetPaymentStatus, useBookAllSlots, useGetUserTransactionHistory } from '../hooks/useQueries';
+import { useGetAllMatches, useGetUserMatches, useJoinMatch, useSubmitPayment, useGetPaymentStatus, useGetUserTransactionHistory, useGetCallerUserProfile, useUpdateCallerUserProfile } from '../hooks/useQueries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Users, DollarSign, Upload, Loader2, CheckCircle, XCircle, Clock, Gamepad2, AlertCircle, Eye, Receipt } from 'lucide-react';
+import { Users, DollarSign, Upload, Loader2, CheckCircle, XCircle, Clock, Gamepad2, AlertCircle, Eye, Receipt, Edit, X } from 'lucide-react';
 import type { Match } from '../backend.d.ts';
 import { ExternalBlob } from '../backend';
 
@@ -19,24 +19,54 @@ export default function UserDashboard() {
   const { data: allMatches = [], isLoading: allMatchesLoading } = useGetAllMatches();
   const { data: userMatches = [], isLoading: userMatchesLoading } = useGetUserMatches();
   const { data: transactionHistory = [], isLoading: transactionsLoading } = useGetUserTransactionHistory();
+  const { data: userProfile } = useGetCallerUserProfile();
   const joinMatch = useJoinMatch();
   const submitPayment = useSubmitPayment();
-  const bookAllSlots = useBookAllSlots();
+  const updateProfile = useUpdateCallerUserProfile();
 
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showWarningDialog, setShowWarningDialog] = useState(false);
-  const [showBookAllDialog, setShowBookAllDialog] = useState(false);
+  const [showEditProfileDialog, setShowEditProfileDialog] = useState(false);
   const [alreadyJoinedMatch, setAlreadyJoinedMatch] = useState<Match | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  
+  // Edit Profile Form State
+  const [editForm, setEditForm] = useState({
+    displayName: '',
+    email: '',
+    phoneNumber: '',
+    gamePlayerId: '',
+    gameName: '',
+    refundQrFile: null as File | null
+  });
+  const [editQrPreview, setEditQrPreview] = useState<string | null>(null);
+  const [currentQrUrl, setCurrentQrUrl] = useState<string | null>(null);
+  const [editUploadProgress, setEditUploadProgress] = useState(0);
 
   // Generate UPI deep link
   const upiLink = selectedMatch && paymentAmount > 0 
     ? `upi://pay?pa=ace8zonereal@ptyes&am=${paymentAmount}&cu=INR`
     : '';
+
+  // Populate edit form when dialog opens
+  useEffect(() => {
+    if (showEditProfileDialog && userProfile) {
+      setEditForm({
+        displayName: userProfile.displayName,
+        email: userProfile.email,
+        phoneNumber: userProfile.phoneNumber,
+        gamePlayerId: userProfile.gamePlayerId,
+        gameName: userProfile.gameName,
+        refundQrFile: null
+      });
+      setCurrentQrUrl(userProfile.refundPaymentQrCode.getDirectURL());
+      setEditQrPreview(null);
+    }
+  }, [showEditProfileDialog, userProfile]);
 
   const getMatchTypeMaxParticipants = (matchType: string) => {
     return 2; // 1v1 only
@@ -81,21 +111,6 @@ export default function UserDashboard() {
       toast.success('Joined match! Please submit payment.');
     } catch (error) {
       toast.error('Failed to join match');
-    }
-  };
-
-  const handleBookAllSlots = async () => {
-    if (!selectedMatch) return;
-    
-    try {
-      await bookAllSlots.mutateAsync(selectedMatch.id);
-      setShowBookAllDialog(false);
-      const totalAmount = selectedMatch.entryFee * getMatchTypeMaxParticipants(selectedMatch.matchType);
-      setPaymentAmount(totalAmount);
-      setShowPaymentDialog(true);
-      toast.success('All slots booked! Please submit payment.');
-    } catch (error) {
-      toast.error('Failed to book all slots');
     }
   };
 
@@ -148,6 +163,73 @@ export default function UserDashboard() {
     }
   };
 
+  const handleEditQrFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file');
+        return;
+      }
+      setEditForm({ ...editForm, refundQrFile: file });
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditQrPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleEditProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!editForm.displayName.trim() || !editForm.email.trim() || 
+        !editForm.phoneNumber.trim() || !editForm.gamePlayerId.trim() || 
+        !editForm.gameName.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    if (!userProfile) {
+      toast.error('Profile not found');
+      return;
+    }
+
+    try {
+      let qrBlob: any;
+      
+      // If user uploaded a new QR code, use it; otherwise keep the existing one
+      if (editForm.refundQrFile) {
+        const arrayBuffer = await editForm.refundQrFile.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        qrBlob = ExternalBlob.fromBytes(uint8Array).withUploadProgress((percentage) => {
+          setEditUploadProgress(percentage);
+        });
+      } else {
+        // Keep existing QR code
+        qrBlob = userProfile.refundPaymentQrCode;
+      }
+
+      await updateProfile.mutateAsync({
+        displayName: editForm.displayName,
+        email: editForm.email,
+        phoneNumber: editForm.phoneNumber,
+        gamePlayerId: editForm.gamePlayerId,
+        gameName: editForm.gameName,
+        refundPaymentQrCode: qrBlob
+      });
+
+      setShowEditProfileDialog(false);
+      setEditQrPreview(null);
+      setEditUploadProgress(0);
+      toast.success('Profile updated successfully');
+    } catch (error) {
+      toast.error('Failed to update profile');
+      setEditUploadProgress(0);
+    }
+  };
+
   const availableMatches = allMatches.filter((match) => {
     const maxParticipants = getMatchTypeMaxParticipants(match.matchType);
     return match.status === 'open' && match.participants.length < maxParticipants;
@@ -155,6 +237,29 @@ export default function UserDashboard() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* User Profile Info Section */}
+      {userProfile && (
+        <Card className="mb-6 border-primary/20 bg-card/50">
+          <CardHeader>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="font-display text-2xl">{userProfile.displayName}</CardTitle>
+                <CardDescription className="mt-1">{userProfile.gameName}</CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowEditProfileDialog(true)}
+                className="font-display"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Profile
+              </Button>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
+      
       <Tabs defaultValue="browse" className="space-y-6">
         <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3">
           <TabsTrigger value="browse" className="font-display">Browse Matches</TabsTrigger>
@@ -239,37 +344,20 @@ export default function UserDashboard() {
 
                       <Separator />
 
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          onClick={() => handleJoinMatch(match)}
-                          disabled={joinMatch.isPending}
-                          className="font-display group-hover:shadow-neon"
-                        >
-                          {joinMatch.isPending ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Joining...
-                            </>
-                          ) : (
-                            'Join Match'
-                          )}
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            setSelectedMatch(match);
-                            setShowBookAllDialog(true);
-                          }}
-                          disabled={bookAllSlots.isPending}
-                          variant="outline"
-                          className="font-display"
-                        >
-                          {bookAllSlots.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            'Book All'
-                          )}
-                        </Button>
-                      </div>
+                      <Button
+                        onClick={() => handleJoinMatch(match)}
+                        disabled={joinMatch.isPending}
+                        className="w-full font-display group-hover:shadow-neon"
+                      >
+                        {joinMatch.isPending ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Joining...
+                          </>
+                        ) : (
+                          'Join Match'
+                        )}
+                      </Button>
                     </CardContent>
                   </Card>
                 );
@@ -432,59 +520,6 @@ export default function UserDashboard() {
               <div className="flex gap-2">
                 <Button onClick={() => setShowWarningDialog(false)} className="w-full font-display">
                   OK
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Book All Slots Confirmation */}
-      <Dialog open={showBookAllDialog} onOpenChange={setShowBookAllDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display text-2xl">Book All Slots</DialogTitle>
-            <DialogDescription>Book the entire match for yourself</DialogDescription>
-          </DialogHeader>
-          {selectedMatch && (
-            <div className="space-y-4">
-              <div className="bg-primary/5 border border-primary/20 p-4 rounded space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Match Type:</span>
-                  <span className="font-display font-bold">1v1 Solo</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Total Slots:</span>
-                  <span className="font-semibold">{getMatchTypeMaxParticipants(selectedMatch.matchType)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Entry Fee per Slot:</span>
-                  <span className="font-semibold text-success">₹{selectedMatch.entryFee}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between items-center">
-                  <span className="font-display font-bold">Total Cost:</span>
-                  <span className="font-display text-2xl font-bold text-success">
-                    ₹{selectedMatch.entryFee * getMatchTypeMaxParticipants(selectedMatch.matchType)}
-                  </span>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                By booking all slots, you will have exclusive access to this match. You will need to pay for all slots.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => setShowBookAllDialog(false)} className="font-display">
-                  Cancel
-                </Button>
-                <Button onClick={handleBookAllSlots} disabled={bookAllSlots.isPending} className="font-display">
-                  {bookAllSlots.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Booking...
-                    </>
-                  ) : (
-                    'Confirm'
-                  )}
                 </Button>
               </div>
             </div>
@@ -671,6 +706,154 @@ export default function UserDashboard() {
               </form>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={showEditProfileDialog} onOpenChange={setShowEditProfileDialog}>
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl">Edit Profile</DialogTitle>
+            <DialogDescription>Update your profile information</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditProfileSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-displayName">Display Name *</Label>
+              <Input
+                id="edit-displayName"
+                placeholder="Enter your name"
+                value={editForm.displayName}
+                onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email *</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                placeholder="your@email.com"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phoneNumber">Phone Number *</Label>
+              <Input
+                id="edit-phoneNumber"
+                type="tel"
+                placeholder="Enter your phone number"
+                value={editForm.phoneNumber}
+                onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })}
+                required
+              />
+              <p className="text-xs text-muted-foreground">Admin will contact you via WhatsApp</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-gamePlayerId">Game Player ID *</Label>
+              <Input
+                id="edit-gamePlayerId"
+                placeholder="Your in-game player ID"
+                value={editForm.gamePlayerId}
+                onChange={(e) => setEditForm({ ...editForm, gamePlayerId: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-gameName">Game Name *</Label>
+              <Input
+                id="edit-gameName"
+                placeholder="e.g., BGMI, Free Fire, COD"
+                value={editForm.gameName}
+                onChange={(e) => setEditForm({ ...editForm, gameName: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-refundQr">Refund Payment QR Code</Label>
+              <Input
+                id="edit-refundQr"
+                type="file"
+                accept="image/*"
+                onChange={handleEditQrFileChange}
+                className="cursor-pointer"
+              />
+              <p className="text-xs text-muted-foreground">Leave empty to keep current QR code, or upload a new one</p>
+              
+              {/* Current QR Preview */}
+              {currentQrUrl && !editQrPreview && (
+                <div className="mt-2">
+                  <p className="text-xs text-muted-foreground mb-2">Current QR Code:</p>
+                  <img 
+                    src={currentQrUrl} 
+                    alt="Current QR" 
+                    className="w-32 h-32 object-cover rounded border border-border cursor-pointer"
+                    onClick={() => setFullScreenImage(currentQrUrl)}
+                  />
+                </div>
+              )}
+
+              {/* New QR Preview */}
+              {editQrPreview && (
+                <div className="relative mt-2 inline-block">
+                  <p className="text-xs text-success mb-2">New QR Code:</p>
+                  <img src={editQrPreview} alt="New QR Preview" className="w-32 h-32 object-cover rounded border border-primary" />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                    onClick={() => {
+                      setEditQrPreview(null);
+                      setEditForm({ ...editForm, refundQrFile: null });
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+            </div>
+            {editUploadProgress > 0 && editUploadProgress < 100 && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Uploading QR code...</span>
+                  <span className="font-mono text-primary">{editUploadProgress}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${editUploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setShowEditProfileDialog(false)}
+                disabled={updateProfile.isPending}
+                className="font-display"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="font-display" 
+                disabled={updateProfile.isPending}
+              >
+                {updateProfile.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  'Update Profile'
+                )}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

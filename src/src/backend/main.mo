@@ -2,18 +2,18 @@ import Map "mo:core/Map";
 import Array "mo:core/Array";
 import Time "mo:core/Time";
 import Set "mo:core/Set";
-import Iter "mo:core/Iter";
 import Principal "mo:core/Principal";
 import Text "mo:core/Text";
 import Runtime "mo:core/Runtime";
 import Order "mo:core/Order";
-import Error "mo:core/Error";
 
 import Storage "blob-storage/Storage";
 import MixinStorage "blob-storage/Mixin";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
@@ -51,36 +51,11 @@ actor {
     refundTimestamp : ?Int;
   };
 
-  /*------------------------------ CUSTOM ITERATOR ------------------------------*/
-  public type CustomIterator<T> = {
-    hasNext : () -> Bool;
-    next : () -> ?T;
-  };
-
-  module IterUtils {
-    public func fromArray<T>(array : [T]) : CustomIterator<T> {
-      var index = 0;
-      {
-        hasNext = func() { index < array.size() };
-        next = func() {
-          if (index < array.size()) {
-            let value = array[index];
-            index += 1;
-            ?value;
-          } else {
-            null;
-          };
-        };
-      };
-    };
-  };
-
   let userProfiles = Map.empty<Principal, UserProfile>();
   let matches = Map.empty<Text, Match>();
   let payments = Map.empty<Text, PaymentSubmission>();
   let userMatchJoins = Map.empty<Principal, Set.Set<Text>>();
 
-  /*------------------------------ Match Comparison -----------------------------*/
   module Match {
     public func compareByCreatedAt(match1 : Match, match2 : Match) : Order.Order {
       Int.compare(match1.createdAt, match2.createdAt);
@@ -92,7 +67,16 @@ actor {
   };
 
   /*------------------------------ Authorization -------------------------------*/
+  private func isAdmin(caller : Principal) : Bool {
+    switch (userProfiles.get(caller)) {
+      case (null) { false };
+      case (?profile) { profile.displayName == "ROWDY YADAV" };
+    };
+  };
+
   public query ({ caller }) func getUserRole() : async ?Text {
+    if (isAdmin(caller)) { return ?"admin" };
+
     switch (AccessControl.getUserRole(accessControlState, caller)) {
       case (#admin) { ?"admin" };
       case (#user) { ?"user" };
@@ -102,51 +86,66 @@ actor {
 
   /*------------------------------ User Profiles -------------------------------*/
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#guest) { Runtime.trap("Unauthorized: Caller is a guest. Only users can have a profile") };
+      case (_) {};
     };
     userProfiles.get(caller);
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    // Users can view any profile according to requirements
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#guest) { Runtime.trap("Unauthorized: Caller is a guest. Only users can view any profile") };
+      case (_) {};
     };
+    
+    // Users can only view their own profile, admins can view any profile
+    if (caller != user and not isAdmin(caller)) {
+      Runtime.trap("Unauthorized: Can only view your own profile");
+    };
+    
     userProfiles.get(user);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#guest) { Runtime.trap("Unauthorized: Caller is a guest. Only users can save profiles") };
+      case (_) {};
     };
     userProfiles.add(caller, profile);
   };
 
   public query ({ caller }) func getAllUsers() : async [UserProfile] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isAdmin(caller)) {
       Runtime.trap("Unauthorized: Only admins can view all users");
     };
     userProfiles.values().toArray();
   };
 
   public shared ({ caller }) func updateUserProfile(user : Principal, profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isAdmin(caller)) {
       Runtime.trap("Unauthorized: Only admins can update users");
     };
     userProfiles.add(user, profile);
   };
 
   public shared ({ caller }) func removeUser(user : Principal) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isAdmin(caller)) {
       Runtime.trap("Unauthorized: Only admins can remove users");
     };
     userProfiles.remove(user);
   };
 
+  public query ({ caller }) func isAdminByDisplayName() : async Bool {
+    switch (userProfiles.get(caller)) {
+      case (null) { false };
+      case (?profile) { profile.displayName == "ROWDY YADAV" };
+    };
+  };
+
   /*--------------------------------- Matches ----------------------------------*/
   public shared ({ caller }) func createMatch(id : Text, matchType : Text, entryFee : Float, startTime : Int) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isAdmin(caller)) {
       Runtime.trap("Unauthorized: Only admins can create matches");
     };
 
@@ -167,10 +166,24 @@ actor {
     matches.add(id, match);
   };
 
+  public shared ({ caller }) func deleteMatch(matchId : Text) : async () {
+    if (not isAdmin(caller)) {
+      Runtime.trap("Unauthorized: Only admins can delete matches");
+    };
+
+    switch (matches.get(matchId)) {
+      case (null) { Runtime.trap("Match not found") };
+      case (?_) {
+        matches.remove(matchId);
+      };
+    };
+  };
+
   /*------------------------------- Match Join ---------------------------------*/
   public shared ({ caller }) func joinMatch(matchId : Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can join matches");
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#guest) { Runtime.trap("Unauthorized: Caller is a guest. Only users can join matches") };
+      case (_) {};
     };
 
     switch (matches.get(matchId)) {
@@ -216,58 +229,15 @@ actor {
     };
   };
 
-  /*------------------- Book All Remaining Slots (should never be used) -----------------*/
-  public shared ({ caller }) func bookAllSlots(matchId : Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can book slots");
-    };
-
-    switch (matches.get(matchId)) {
-      case (null) { Runtime.trap("Match not found") };
-      case (?match) {
-        if (match.status != "open") {
-          Runtime.trap("Match is not open for joining");
-        };
-
-        if (match.participants.any(func(p) { p == caller })) {
-          Runtime.trap("User already joined this match");
-        };
-
-        let remainingSlots = 2 - match.participants.size();
-        if (remainingSlots <= 0) {
-          Runtime.trap("Match is already full");
-        };
-
-        let updatedParticipants = match.participants.concat(Array.tabulate(remainingSlots, func(_) { caller }));
-        let updatedMatch = {
-          id = match.id;
-          matchType = match.matchType;
-          entryFee = match.entryFee;
-          status = "full";
-          participants = updatedParticipants;
-          createdAt = match.createdAt;
-          startTime = match.startTime;
-        };
-        matches.add(matchId, updatedMatch);
-
-        let userMatches = switch (userMatchJoins.get(caller)) {
-          case (null) { Set.fromArray<Text>([]) };
-          case (?existing) { existing };
-        };
-        userMatches.add(matchId);
-        userMatchJoins.add(caller, userMatches);
-      };
-    };
-  };
-
   /*-------------------------------- Payments ----------------------------------*/
   public shared ({ caller }) func submitPayment(
     matchId : Text,
     screenshot : Storage.ExternalBlob,
     amountPaid : Float,
   ) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can submit payments");
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#guest) { Runtime.trap("Unauthorized: Caller is a guest. Only users can submit payments") };
+      case (_) {};
     };
 
     switch (matches.get(matchId)) {
@@ -296,7 +266,7 @@ actor {
   };
 
   public shared ({ caller }) func approvePayment(paymentId : Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isAdmin(caller)) {
       Runtime.trap("Unauthorized: Only admins can approve payments");
     };
 
@@ -321,7 +291,7 @@ actor {
   };
 
   public shared ({ caller }) func rejectPayment(paymentId : Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isAdmin(caller)) {
       Runtime.trap("Unauthorized: Only admins can reject payments");
     };
 
@@ -346,7 +316,7 @@ actor {
   };
 
   public shared ({ caller }) func markAsRefunded(paymentId : Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isAdmin(caller)) {
       Runtime.trap("Unauthorized: Only admins can mark as refunded");
     };
 
@@ -371,22 +341,24 @@ actor {
   };
 
   public query ({ caller }) func getPendingPayments() : async [PaymentSubmission] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isAdmin(caller)) {
       Runtime.trap("Unauthorized: Only admins can view pending payments");
     };
     payments.values().toArray().filter(func(p) { p.status == "pending" });
   };
 
   public query ({ caller }) func getPaymentStatus(matchId : Text) : async ?PaymentSubmission {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view payment status");
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#guest) { Runtime.trap("Unauthorized: Caller is a guest. Only users can view their payment") };
+      case (_) {};
     };
 
     let paymentId = matchId # "_" # caller.toText();
     switch (payments.get(paymentId)) {
       case (null) { null };
       case (?payment) {
-        if (payment.user != caller and not AccessControl.isAdmin(accessControlState, caller)) {
+        // Users can only view their own payment status, admins can view any payment
+        if (payment.user != caller and not isAdmin(caller)) {
           Runtime.trap("Unauthorized: Can only view your own payment status");
         };
         ?payment;
@@ -395,11 +367,21 @@ actor {
   };
 
   public query ({ caller }) func getUserTransactionHistory() : async [PaymentSubmission] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view transaction history");
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#guest) {
+        Runtime.trap("Unauthorized: Caller is a guest. Only users can view transaction history");
+      };
+      case (_) {};
     };
 
     payments.values().toArray().filter(func(p) { p.user == caller });
+  };
+
+  public query ({ caller }) func getAllPayments() : async [PaymentSubmission] {
+    if (not isAdmin(caller)) {
+      Runtime.trap("Unauthorized: Only admins can view all payments");
+    };
+    payments.values().toArray();
   };
 
   /*------------------------------- Match Queries ------------------------------*/
@@ -412,8 +394,11 @@ actor {
   };
 
   public query ({ caller }) func getUserMatches() : async [Match] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view their matches");
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#guest) {
+        Runtime.trap("Unauthorized: Caller is a guest. Only users can view their own matches");
+      };
+      case (_) {};
     };
 
     switch (userMatchJoins.get(caller)) {
@@ -450,7 +435,7 @@ actor {
   };
 
   public query ({ caller }) func getMatchParticipants(matchId : Text) : async [Principal] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isAdmin(caller)) {
       Runtime.trap("Unauthorized: Only admins can view match participants");
     };
 
@@ -460,3 +445,4 @@ actor {
     };
   };
 };
+

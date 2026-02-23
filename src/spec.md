@@ -1,44 +1,58 @@
 # ACE8WIN Matchmaking
 
 ## Current State
-The platform has a full-featured matchmaking system (Draft 3) with:
-- User profiles with game UID, game name, phone number, and refund QR codes
-- Match creation and joining for 1v1, 2v2, and 4v4 modes
-- UPI payment submission with auto-generated QR codes (ace8zonereal@ptyes)
-- Admin dashboard for payment confirmation and user management
-- Transaction history with refund tracking
-- Authorization system (admin/user roles)
-- Blob storage for QR codes and payment screenshots
+
+The ACE8WIN platform is a 1v1 gaming matchmaking system with the following features:
+
+**Backend:**
+- User profile management (name, email, phone, game ID, game name, refund QR)
+- Match creation and management (1v1 only with scheduled start times)
+- Join match system with entry fee payments
+- Payment screenshot storage
+- Transaction history tracking
+- Refund processing system
+- Admin role checking based on display name "ROWDY YADAV"
+
+**Frontend:**
+- Internet Identity authentication
+- Profile setup form for new users
+- Role-based dashboards (admin vs user)
+- Match browsing and joining with UPI payment flow
+- Auto-generated QR codes for payments
+- User profile editing
+- Admin features: create matches, view users, manage refunds
+
+**Issues:**
+- Admin system currently checks for display name "ROWDY YADAV" which failed to work properly
+- Backend admin logic is not properly granting admin access
 
 ## Requested Changes (Diff)
 
 ### Add
-- Nothing new
+- Nothing new to add
 
 ### Modify
-- Match creation UI: Remove 2v2 and 4v4 options, keep only 1v1
-- Match creation form: Add time picker for match start time (scheduled real timing)
-- User profile form: Already has phone number field, ensure it's prominently displayed
-- Admin dashboard: Ensure phone numbers are visible in player info so admin can contact via WhatsApp
+- **Backend admin system**: Change from display name-based to email-based admin check
+  - Make `shashiyadavbhai9@gmail.com` the hardcoded admin email
+  - Update `isCallerAdmin` to check user profile email against admin email
+- **Frontend**: No changes needed (already displays admin badge correctly when backend returns true)
 
 ### Remove
-- 2v2 and 4v4 match type options from frontend UI
-- Backend logic for non-solo matches (already mostly done, just needs cleanup)
+- Remove display name-based admin check logic
 
 ## Implementation Plan
 
-1. Backend: Update Motoko code to only support 1v1 (solo) matches with scheduled start time
-   - Match type validation (only "solo")
-   - Store and return startTime for each match
-   - Ensure user profiles include phone number
+1. **Backend changes**:
+   - Regenerate Motoko backend with email-based admin system
+   - Hardcode admin email as `shashiyadavbhai9@gmail.com`
+   - Update `isCallerAdmin` function to check profile email field
 
-2. Frontend: Update UI to remove 2v2/4v4 options and add time scheduling
-   - Admin match creation: Remove 2v2/4v4 dropdowns, add time picker for start time
-   - Admin dashboard: Display player phone numbers prominently for WhatsApp contact
-   - User profile: Ensure phone number is captured and displayed
+2. **Frontend**: No changes required (already works correctly when backend returns proper admin status)
+
+3. **Validation**: Typecheck and build
 
 ## UX Notes
-- Admin creates only 1v1 matches with specific start times
-- Users see match start time when browsing available matches
-- Admin can view phone numbers to send room ID/password via WhatsApp
-- Payment flow with auto-generated UPI QR codes remains unchanged
+
+- Users who create a profile with email `shashiyadavbhai9@gmail.com` will see the admin panel
+- All other users see the regular user dashboard
+- Admin badge displays in header when logged in as admin

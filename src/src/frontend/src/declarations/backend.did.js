@@ -34,14 +34,6 @@ export const Match = IDL.Record({
   'entryFee' : IDL.Float64,
 });
 export const ExternalBlob = IDL.Vec(IDL.Nat8);
-export const UserProfile = IDL.Record({
-  'refundPaymentQrCode' : ExternalBlob,
-  'displayName' : IDL.Text,
-  'email' : IDL.Text,
-  'gamePlayerId' : IDL.Text,
-  'gameName' : IDL.Text,
-  'phoneNumber' : IDL.Text,
-});
 export const PaymentSubmission = IDL.Record({
   'id' : IDL.Text,
   'status' : IDL.Text,
@@ -53,6 +45,14 @@ export const PaymentSubmission = IDL.Record({
   'timestamp' : IDL.Int,
   'refundTimestamp' : IDL.Opt(IDL.Int),
   'screenshot' : ExternalBlob,
+});
+export const UserProfile = IDL.Record({
+  'refundPaymentQrCode' : ExternalBlob,
+  'displayName' : IDL.Text,
+  'email' : IDL.Text,
+  'gamePlayerId' : IDL.Text,
+  'gameName' : IDL.Text,
+  'phoneNumber' : IDL.Text,
 });
 
 export const idlService = IDL.Service({
@@ -85,9 +85,10 @@ export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'approvePayment' : IDL.Func([IDL.Text], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-  'bookAllSlots' : IDL.Func([IDL.Text], [], []),
   'createMatch' : IDL.Func([IDL.Text, IDL.Text, IDL.Float64, IDL.Int], [], []),
+  'deleteMatch' : IDL.Func([IDL.Text], [], []),
   'getAllMatches' : IDL.Func([], [IDL.Vec(Match)], ['query']),
+  'getAllPayments' : IDL.Func([], [IDL.Vec(PaymentSubmission)], ['query']),
   'getAllUsers' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
@@ -116,6 +117,7 @@ export const idlService = IDL.Service({
       [IDL.Vec(PaymentSubmission)],
       ['query'],
     ),
+  'isAdminByDisplayName' : IDL.Func([], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'joinMatch' : IDL.Func([IDL.Text], [], []),
   'markAsRefunded' : IDL.Func([IDL.Text], [], []),
@@ -155,14 +157,6 @@ export const idlFactory = ({ IDL }) => {
     'entryFee' : IDL.Float64,
   });
   const ExternalBlob = IDL.Vec(IDL.Nat8);
-  const UserProfile = IDL.Record({
-    'refundPaymentQrCode' : ExternalBlob,
-    'displayName' : IDL.Text,
-    'email' : IDL.Text,
-    'gamePlayerId' : IDL.Text,
-    'gameName' : IDL.Text,
-    'phoneNumber' : IDL.Text,
-  });
   const PaymentSubmission = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
@@ -174,6 +168,14 @@ export const idlFactory = ({ IDL }) => {
     'timestamp' : IDL.Int,
     'refundTimestamp' : IDL.Opt(IDL.Int),
     'screenshot' : ExternalBlob,
+  });
+  const UserProfile = IDL.Record({
+    'refundPaymentQrCode' : ExternalBlob,
+    'displayName' : IDL.Text,
+    'email' : IDL.Text,
+    'gamePlayerId' : IDL.Text,
+    'gameName' : IDL.Text,
+    'phoneNumber' : IDL.Text,
   });
   
   return IDL.Service({
@@ -206,13 +208,14 @@ export const idlFactory = ({ IDL }) => {
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'approvePayment' : IDL.Func([IDL.Text], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-    'bookAllSlots' : IDL.Func([IDL.Text], [], []),
     'createMatch' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Float64, IDL.Int],
         [],
         [],
       ),
+    'deleteMatch' : IDL.Func([IDL.Text], [], []),
     'getAllMatches' : IDL.Func([], [IDL.Vec(Match)], ['query']),
+    'getAllPayments' : IDL.Func([], [IDL.Vec(PaymentSubmission)], ['query']),
     'getAllUsers' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
@@ -245,6 +248,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(PaymentSubmission)],
         ['query'],
       ),
+    'isAdminByDisplayName' : IDL.Func([], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'joinMatch' : IDL.Func([IDL.Text], [], []),
     'markAsRefunded' : IDL.Func([IDL.Text], [], []),

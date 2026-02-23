@@ -51,9 +51,10 @@ export enum UserRole {
 export interface backendInterface {
     approvePayment(paymentId: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    bookAllSlots(matchId: string): Promise<void>;
     createMatch(id: string, matchType: string, entryFee: number, startTime: bigint): Promise<void>;
+    deleteMatch(matchId: string): Promise<void>;
     getAllMatches(): Promise<Array<Match>>;
+    getAllPayments(): Promise<Array<PaymentSubmission>>;
     getAllUsers(): Promise<Array<UserProfile>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
@@ -66,6 +67,7 @@ export interface backendInterface {
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUserRole(): Promise<string | null>;
     getUserTransactionHistory(): Promise<Array<PaymentSubmission>>;
+    isAdminByDisplayName(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     joinMatch(matchId: string): Promise<void>;
     markAsRefunded(paymentId: string): Promise<void>;
